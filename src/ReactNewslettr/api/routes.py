@@ -1,13 +1,13 @@
 # =============================================================================
 #  Filename: routes.py
 #
-#  Short Description: API routes for the newsletter application
+#  Short Description: API routes for the AI News Newsletter
 #
 #  Creation date: 2025-01-27
 #  Author: Priya
 # =============================================================================
 
-from fastapi import APIRouter, HTTPException, status, Query
+from fastapi import APIRouter, HTTPException, status, Query, Response
 from datetime import datetime
 from typing import Optional
 
@@ -17,6 +17,7 @@ from ..models.api_models import APIResponse, ErrorResponse
 from ..models.news_models import NewsletterData
 from ..config import settings
 import logging
+import requests
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -203,5 +204,68 @@ async def get_config():
                 error="ConfigRetrievalError",
                 message="Failed to retrieve configuration",
                 details={"error": str(e)}
+            ).model_dump()
+        )
+
+
+@router.get("/archives", response_model=APIResponse, summary="List archived newsletter dates")
+async def list_archives():
+    try:
+        dates = newsletter_service.list_archives()
+        return APIResponse(success=True, message="Archive dates", data={"dates": dates})
+    except Exception as e:
+        logger.error(f"Error listing archives: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=ErrorResponse(
+                error="ArchiveListError",
+                message="Failed to list archives",
+                details={"error": str(e)}
+            ).model_dump()
+        )
+
+
+@router.get("/newsletter/by-date/{date_str}", response_model=APIResponse, summary="Get newsletter by date")
+async def get_newsletter_by_date(date_str: str):
+    try:
+        newsletter = await newsletter_service.get_newsletter_for_date(date_str)
+        if not newsletter:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=ErrorResponse(
+                    error="ArchiveNotFound",
+                    message="No cached newsletter for that date",
+                    details={"date": date_str}
+                ).model_dump()
+            )
+        return APIResponse(success=True, message="Newsletter for date", data={"newsletter": newsletter})
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching newsletter by date: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=ErrorResponse(
+                error="ArchiveFetchError",
+                message="Failed to fetch newsletter by date",
+                details={"error": str(e)}
+            ).model_dump()
+        )
+
+
+@router.get("/image", summary="Proxy images to avoid hotlink restrictions")
+async def proxy_image(url: str):
+    try:
+        r = requests.get(url, timeout=10)
+        content_type = r.headers.get("Content-Type", "image/jpeg")
+        return Response(content=r.content, media_type=content_type)
+    except Exception as e:
+        logger.error(f"Image proxy failed for {url}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=ErrorResponse(
+                message="Image proxy failed",
+                error="ImageProxyError",
+                details={"url": url, "error": str(e)}
             ).model_dump()
         )

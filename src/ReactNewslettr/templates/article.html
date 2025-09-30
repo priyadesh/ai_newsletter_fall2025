@@ -141,6 +141,7 @@
 
                     if (result.success && result.data) {
                         this.renderArticle(result.data);
+                        await this.augmentFromCurrentNewsletter();
                         this.hideLoading();
                         this.showContent();
                     } else {
@@ -207,10 +208,11 @@
 
             renderBody(article) {
                 const articleBody = document.getElementById('articleBody');
+                const cleanedSummary = (article.summary || '').replace(/[\.‥…]+/g, '').trim();
                 articleBody.innerHTML = `
                     <div class="prose max-w-none">
                         <h2 class="text-xl font-semibold text-gray-800 mb-4">Summary</h2>
-                        <p class="text-gray-700 text-lg leading-relaxed mb-8">${article.summary}</p>
+                        <p class="text-gray-700 text-lg leading-relaxed mb-8" id="primarySummary">${cleanedSummary}</p>
 
                         ${article.key_points && article.key_points.length > 0 ? `
                             <h3 class="text-lg font-semibold text-gray-800 mb-4">Key Points</h3>
@@ -218,8 +220,33 @@
                                 ${article.key_points.map(point => `<li>${point}</li>`).join('')}
                             </ul>
                         ` : ''}
+
+                        <div id="moreContextContainer" class="mt-8 hidden">
+                            <h3 class="text-lg font-semibold text-gray-800 mb-3">More context</h3>
+                            <p class="text-gray-700 leading-relaxed" id="moreContext"></p>
+                        </div>
                     </div>
                 `;
+            }
+
+            async augmentFromCurrentNewsletter() {
+                try {
+                    const res = await fetch(`${this.apiBase}/newsletter`);
+                    const data = await res.json();
+                    if (!res.ok || !data.success || !data.data || !data.data.summaries) return;
+                    const summaries = data.data.summaries;
+                    const match = summaries.find(s => s.id === this.articleId);
+                    if (!match) return;
+                    const snippet = match.original_article && (match.original_article.snippet || match.original_article.description);
+                    if (!snippet) return;
+
+                    const moreEl = document.getElementById('moreContext');
+                    const wrap = document.getElementById('moreContextContainer');
+                    moreEl.textContent = snippet;
+                    wrap.classList.remove('hidden');
+                } catch (_) {
+                    // Best-effort; ignore errors
+                }
             }
 
             setupActions(article) {

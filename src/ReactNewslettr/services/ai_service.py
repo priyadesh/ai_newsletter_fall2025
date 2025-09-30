@@ -38,17 +38,19 @@ class AIService:
     
     async def summarize_article(self, article: NewsArticle) -> NewsSummary:
         """Summarize an article using AI or mock data."""
-        if self.llm and not settings.is_demo_mode:
+        logger.info(f"Summarizing article: {article.title[:50]}...")
+        logger.info(f"Using AI: {self.llm is not None}, Has OpenAI key: {settings.has_openai_key}")
+        if True:  # Always try AI first
             return self._ai_summarize_article(article)
         else:
-            return self._mock_summarize_article(article)
+            raise
     
     async def write_editorial(self, summaries: List[NewsSummary]) -> EditorialArticle:
         """Write editorial content using AI or mock data."""
-        if self.llm and not settings.is_demo_mode:
+        if True:  # Always try AI first
             return self._ai_write_editorial(summaries)
         else:
-            return self._mock_write_editorial(summaries)
+            raise
     
     def _ai_summarize_article(self, article: NewsArticle) -> NewsSummary:
         """Use AI to summarize an article."""
@@ -66,21 +68,21 @@ class AIService:
             # Create summarization task
             summary_task = Task(
                 description=f"""
-                Summarize this AI news article in 2-3 sentences:
+                Summarize this AI news article in 4-6 sentences, providing a comprehensive overview:
                 
                 Title: {article.title}
                 Source: {article.source}
                 Content: {article.snippet}
                 
-                Create:
+                Create a complete, detailed summary without truncation or ellipses:
                 1. A catchy, engaging title (different from original)
-                2. A clear 2-3 sentence summary
+                2. A comprehensive 4-6 sentence summary that covers all key aspects
                 3. 3-5 key points
                 4. A relevance score (0.0-1.0) for AI/tech audience
                 
-                Format your response as:
+                IMPORTANT: Do not use ellipses (...) or truncate content. Provide complete, full sentences. Format your response as:
                 TITLE: [catchy title]
-                SUMMARY: [2-3 sentence summary]
+                SUMMARY: [4-6 sentence comprehensive summary]
                 KEY_POINTS: [bullet point 1, bullet point 2, bullet point 3]
                 RELEVANCE: [score between 0.0 and 1.0]
                 """,
@@ -102,8 +104,8 @@ class AIService:
             return self._parse_summary_result(result, article)
             
         except Exception as e:
-            logger.error(f"AI summarization failed: {e}")
-            return self._mock_summarize_article(article)
+            logger.error(f"AI summarization failed: {e}", exc_info=True)
+            raise
     
     def _ai_write_editorial(self, summaries: List[NewsSummary]) -> EditorialArticle:
         """Use AI to write editorial content."""
@@ -163,7 +165,7 @@ class AIService:
             
         except Exception as e:
             logger.error(f"AI editorial generation failed: {e}")
-            return self._mock_write_editorial(summaries)
+            raise
     
     def _parse_summary_result(self, result: str, article: NewsArticle) -> NewsSummary:
         """Parse AI result into NewsSummary object."""
@@ -207,7 +209,7 @@ class AIService:
             
         except Exception as e:
             logger.error(f"Failed to parse summary result: {e}")
-            return self._mock_summarize_article(article)
+            raise
     
     def _parse_editorial_result(self, result: str) -> EditorialArticle:
         """Parse AI result into EditorialArticle object."""
@@ -254,7 +256,7 @@ class AIService:
         return NewsSummary(
             id=f"summary_{abs(hash(article.title + str(article.url))) % 100000:05d}",
             catchy_title=catchy_title,
-            summary=f"{article.snippet} This development represents a significant step forward in AI technology.",
+            summary=f"{article.snippet} This development represents a significant step forward in AI technology. The innovation showcases the continued advancement of artificial intelligence capabilities across multiple sectors. Industry experts are closely monitoring the implications of this breakthrough for future applications.",
             key_points=[
                 "Significant advancement in AI capabilities",
                 "Potential impact on various industries", 

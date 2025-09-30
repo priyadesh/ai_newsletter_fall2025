@@ -1,7 +1,7 @@
 # =============================================================================
 #  Filename: cache_service.py
 #
-#  Short Description: File-based caching service for newsletter data with date-based storage
+#  Short Description: File-based caching utilities for newsletters
 #
 #  Creation date: 2025-01-27
 #  Author: Priya
@@ -13,6 +13,7 @@ import asyncio
 from typing import Optional, Any
 from datetime import datetime, date
 from pathlib import Path
+import re
 
 from ..models.news_models import NewsletterData
 from ..config import settings
@@ -113,6 +114,39 @@ class CacheService:
                     print(f"Deleted today's cache file: {cache_file}")
                 except Exception as e:
                     print(f"Error deleting today's cache file {cache_file}: {e}")
+
+    def list_archive_dates(self) -> list[str]:
+        """Return available cache dates (YYYY-MM-DD) found in the cache directory."""
+        cache_dir = Path(self.cache_dir)
+        if not cache_dir.exists():
+            return []
+        dates: list[str] = []
+        pattern = re.compile(r"^newsletter_(\d{4}-\d{2}-\d{2})\.json$")
+        for p in cache_dir.iterdir():
+            if not p.is_file():
+                continue
+            m = pattern.match(p.name)
+            if m:
+                dates.append(m.group(1))
+        dates.sort(reverse=True)
+        return dates
+
+    def get_newsletter_by_date(self, date_str: str):
+        """Load a cached newsletter by date (YYYY-MM-DD). Returns NewsletterData or None."""
+        file_path = Path(self.cache_dir) / f"newsletter_{date_str}.json"
+        if not file_path.exists():
+            return None
+        try:
+            with file_path.open("r", encoding="utf-8") as f:
+                payload = json.load(f)
+            # payload may be entire API wrapper or raw newsletter; handle both
+            if isinstance(payload, dict) and "newsletter" in payload:
+                data = payload["newsletter"]
+            else:
+                data = payload
+            return NewsletterData(**data)
+        except Exception:
+            return None
 
 
 # Create global instance

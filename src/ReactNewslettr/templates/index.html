@@ -50,6 +50,9 @@
             font-size: 12px;
             z-index: 1000;
         }
+        @media (min-width: 768px) {
+            body { padding-left: 16rem; }
+        }
     </style>
 </head>
 <body class="bg-gray-100 font-sans antialiased">
@@ -58,6 +61,14 @@
         <div id="cacheIndicator" class="cache-indicator hidden">
             <i class="fas fa-database mr-1"></i>
             <span id="cacheStatus">Loading...</span>
+        </div>
+
+        <!-- Left sidebar archives nav -->
+        <div id="archivesSidebar" class="fixed inset-y-0 left-0 w-64 bg-white border-r-2 border-blue-500 overflow-y-auto z-50 shadow-lg">
+            <div class="p-4">
+                <h2 class="text-lg font-semibold mb-3 text-blue-600">📚 Archives</h2>
+                <ul id="archivesList" class="space-y-2 text-sm text-gray-700"></ul>
+            </div>
         </div>
 
         <!-- Header -->
@@ -145,9 +156,14 @@
                 this.init();
             }
 
-            async init() {
+            async init() { console.log("Initializing app..."); console.log("Sidebar element:", document.getElementById("archivesSidebar"));
                 this.setupEventListeners();
-                await this.loadNewsletter();
+                try {
+                    await this.loadArchives();
+                } catch (e) {
+                    console.warn('Failed to load archives', e);
+                }
+                await this.loadNewsletter(false);
             }
 
             setupEventListeners() {
@@ -156,7 +172,7 @@
                 });
             }
 
-            async loadNewsletter() {
+            async loadNewsletter(isFresh = true) {
                 this.showLoadingState();
                 
                 try {
@@ -215,6 +231,58 @@
                 }
             }
 
+            async loadArchives() { console.log("Loading archives...");
+                const listEl = document.getElementById('archivesList');
+                if (!listEl) return;
+                listEl.innerHTML = '<li class="text-gray-400">Loading…</li>';
+                try {
+                    const res = await fetch(`${this.apiBase}/archives`);
+                    const data = await res.json();
+                    if (!res.ok || !data.success) throw new Error('Failed to fetch archives');
+                    const dates = (data.data && data.data.dates) || [];
+                    listEl.innerHTML = '';
+                    if (dates.length === 0) {
+                        listEl.innerHTML = '<li class="text-gray-400">No archives yet</li>';
+                        return;
+                    }
+                    dates.forEach(dateStr => { console.log("Adding date:", dateStr);
+                        const li = document.createElement('li');
+                        const a = document.createElement('a');
+                        a.href = `#archive-${dateStr}`;
+                        a.className = 'block px-2 py-1 rounded hover:bg-gray-100';
+                        a.textContent = dateStr;
+                        a.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            this.loadArchiveDate(dateStr);
+                        });
+                        li.appendChild(a);
+                        listEl.appendChild(li);
+                    });
+                } catch (err) {
+                    listEl.innerHTML = '<li class="text-red-500">Failed to load archives</li>';
+                }
+            }
+
+            async loadArchiveDate(dateStr) {
+                try {
+                    this.showLoadingState(); // Use showLoadingState for consistency
+                    const res = await fetch(`${this.apiBase}/newsletter/by-date/${dateStr}`);
+                    const result = await res.json();
+                    if (!res.ok || !result.success || !result.data || !result.data.newsletter) {
+                        throw new Error('Archive not found');
+                    }
+                    const newsletter = result.data.newsletter;
+                    this.renderEditorial(newsletter.editorial);
+                    this.renderNewsArticles(newsletter.summaries);
+                    this.updateCacheIndicator({ fromCache: true, cacheDate: dateStr });
+                    this.showNotification(`Loaded archive ${dateStr}`, 'info');
+                } catch (e) {
+                    this.showNotification('Failed to load archive', 'error');
+                } finally {
+                    this.hideLoadingState(); // Use hideLoadingState for consistency
+                }
+            }
+
             renderEditorial(editorial) {
                 this.editorialTitle.textContent = editorial.title;
                 this.editorialContent.textContent = editorial.content;
@@ -223,36 +291,69 @@
             }
 
             renderNewsArticles(summaries) {
-                this.newsGrid.innerHTML = ''; // Clear loading cards
+                this.newsGrid.innerHTML = '';
                 summaries.forEach(summary => {
                     const card = document.createElement('div');
                     card.className = 'bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow duration-300';
-                    card.innerHTML = `
-                        <a href="/article/${summary.id}" class="block">
-                            <div class="relative">
-                                ${summary.original_article.thumbnail ? `
-                                    <img src="${summary.original_article.thumbnail}" 
-                                         alt="${summary.catchy_title}" 
-                                         class="news-card-image"
-                                         onerror="this.onerror=null;this.src='/static/images/fallback.png';this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden');">
-                                    <div class="fallback-image-container absolute inset-0 hidden">
-                                        <i class="fas fa-robot text-white text-5xl opacity-75"></i>
-                                    </div>
-                                ` : `
-                                    <div class="fallback-image-container">
-                                        <i class="fas fa-robot text-white text-5xl opacity-75"></i>
-                                    </div>
-                                `}
-                            </div>
-                            <div class="p-4">
-                                <h3 class="text-xl font-semibold text-gray-800 mb-2">${summary.catchy_title}</h3>
-                                <p class="text-gray-600 text-sm">${summary.summary.substring(0, 100)}...</p>
-                                <span class="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full mt-3">
-                                    ${summary.original_article.source || 'Unknown Source'}
-                                </span>
-                            </div>
-                        </a>
-                    `;
+
+                    const link = document.createElement('a');
+                    link.href = `/article/${summary.id}`;
+                    link.className = 'block';
+
+                    const imgWrapper = document.createElement('div');
+                    imgWrapper.className = 'relative';
+
+                    if (summary.original_article && summary.original_article.thumbnail) {
+                        const img = document.createElement('img');
+                        img.src = summary.original_article.thumbnail;
+                        img.alt = summary.catchy_title || '';
+                        img.className = 'news-card-image';
+
+                        const fallback = document.createElement('div');
+                        fallback.className = 'fallback-image-container absolute inset-0 hidden';
+                        const icon = document.createElement('i');
+                        icon.className = 'fas fa-robot text-white text-5xl opacity-75';
+                        fallback.appendChild(icon);
+
+                        img.onerror = () => {
+                            img.classList.add('hidden');
+                            fallback.classList.remove('hidden');
+                        };
+
+                        imgWrapper.appendChild(img);
+                        imgWrapper.appendChild(fallback);
+                    } else {
+                        const fallback = document.createElement('div');
+                        fallback.className = 'fallback-image-container';
+                        const icon = document.createElement('i');
+                        icon.className = 'fas fa-robot text-white text-5xl opacity-75';
+                        fallback.appendChild(icon);
+                        imgWrapper.appendChild(fallback);
+                    }
+
+                    const body = document.createElement('div');
+                    body.className = 'p-4';
+
+                    const h3 = document.createElement('h3');
+                    h3.className = 'text-xl font-semibold text-gray-800 mb-2';
+                    h3.textContent = summary.catchy_title || summary.original_article?.title || 'Untitled';
+
+                    const p = document.createElement('p');
+                    p.className = 'text-gray-600 text-sm';
+                    const snippet = (summary.summary || summary.original_article?.snippet || '').trim();
+                    p.textContent = snippet.length > 0 ? (snippet.length > 140 ? snippet.slice(0, 140) + '…' : snippet) : '';
+
+                    const badge = document.createElement('span');
+                    badge.className = 'inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full mt-3';
+                    badge.textContent = summary.original_article?.source || 'Unknown Source';
+
+                    body.appendChild(h3);
+                    if (p.textContent) body.appendChild(p);
+                    body.appendChild(badge);
+
+                    link.appendChild(imgWrapper);
+                    link.appendChild(body);
+                    card.appendChild(link);
                     this.newsGrid.appendChild(card);
                 });
             }
@@ -270,6 +371,12 @@
 
             showLoadingState() {
                 this.newsGrid.innerHTML = this.getLoadingCardsHtml(9);
+                this.editorialTitle.innerHTML = '<div class="loading-spinner inline-block w-6 h-6 border-4 border-blue-500 border-t-transparent rounded-full"></div> <span class="ml-2">Loading Editorial...</span>';
+                this.editorialContent.innerHTML = '<div class="h-4 bg-gray-200 rounded w-full mb-2"></div><div class="h-4 bg-gray-200 rounded w-5/6"></div>';
+            }
+
+            hideLoadingState() {
+                this.newsGrid.innerHTML = ''; // Clear loading cards
                 this.editorialTitle.innerHTML = '<div class="loading-spinner inline-block w-6 h-6 border-4 border-blue-500 border-t-transparent rounded-full"></div> <span class="ml-2">Loading Editorial...</span>';
                 this.editorialContent.innerHTML = '<div class="h-4 bg-gray-200 rounded w-full mb-2"></div><div class="h-4 bg-gray-200 rounded w-5/6"></div>';
             }

@@ -1,7 +1,7 @@
 # =============================================================================
 #  Filename: newsletter_service.py
 #
-#  Short Description: Main service for orchestrating the newsletter generation workflow
+#  Short Description: Orchestrates newsletter generation and caching
 #
 #  Creation date: 2025-01-27
 #  Author: Priya
@@ -15,7 +15,7 @@ from datetime import datetime
 from ..models.news_models import NewsletterData, NewsArticle, NewsSummary, EditorialArticle
 from .news_service import NewsService
 from .ai_service import AIService
-from .cache_service import CacheService
+from .cache_service import cache_service
 from ..config import settings
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ class NewsletterService:
     def __init__(self):
         self.news_service = NewsService()
         self.ai_service = AIService()
-        self.cache_service = CacheService()
+        self.cache_service = cache_service
         logger.info("NewsletterService initialized")
     
     async def generate_newsletter(self, force_refresh: bool = False) -> NewsletterData:
@@ -89,25 +89,43 @@ class NewsletterService:
             return None
     
     async def get_article_by_id(self, article_id: str) -> Optional[dict]:
-        """Get specific article by ID."""
+        """Get specific article by ID.
+        Searches today's newsletter first, then all archived cache dates."""
         newsletter = await self.get_newsletter()
-        if not newsletter:
-            return None
-        
-        for summary in newsletter.summaries:
-            if summary.id == article_id:
-                return {
-                    "id": summary.id,
-                    "title": summary.catchy_title,
-                    "summary": summary.summary,
-                    "key_points": summary.key_points,
-                    "url": summary.original_article.url,
-                    "thumbnail": summary.original_article.thumbnail,
-                    "source": summary.original_article.source,
-                    "published_date": summary.original_article.published_date,
-                    "relevance_score": summary.relevance_score
-                }
-        
+        if newsletter:
+            for summary in newsletter.summaries:
+                if summary.id == article_id:
+                    return {
+                        "id": summary.id,
+                        "title": summary.catchy_title,
+                        "summary": summary.summary,
+                        "key_points": summary.key_points,
+                        "url": summary.original_article.url,
+                        "thumbnail": summary.original_article.thumbnail,
+                        "source": summary.original_article.source,
+                        "published_date": summary.original_article.published_date,
+                        "relevance_score": summary.relevance_score,
+                    }
+
+        # If not found in today's, search archives
+        for date_str in self.cache_service.list_archive_dates():
+            archived = self.cache_service.get_newsletter_by_date(date_str)
+            if not archived:
+                continue
+            for summary in archived.summaries:
+                if summary.id == article_id:
+                    return {
+                        "id": summary.id,
+                        "title": summary.catchy_title,
+                        "summary": summary.summary,
+                        "key_points": summary.key_points,
+                        "url": summary.original_article.url,
+                        "thumbnail": summary.original_article.thumbnail,
+                        "source": summary.original_article.source,
+                        "published_date": summary.original_article.published_date,
+                        "relevance_score": summary.relevance_score,
+                    }
+
         return None
     
     async def get_cache_status(self) -> dict:
@@ -117,6 +135,14 @@ class NewsletterService:
     async def clear_cache(self) -> None:
         """Clear all cached data."""
         await self.cache_service.clear_cache()
+
+    def list_archives(self) -> list[str]:
+        """Return available archive dates (YYYY-MM-DD)."""
+        return self.cache_service.list_archive_dates()
+
+    async def get_newsletter_for_date(self, date_str: str):
+        """Return cached newsletter for a specific date, or None if missing."""
+        return self.cache_service.get_newsletter_by_date(date_str)
 
 # Export the instance
 newsletter_service = NewsletterService()
