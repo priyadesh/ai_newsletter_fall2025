@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ app_name }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* Custom styles for gradients and loading spinners */
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .loading-spinner {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .news-card-image {
+            width: 100%;
+            height: 150px; /* Fixed height for consistency */
+            object-fit: cover; /* Cover the area, cropping if necessary */
+            border-top-left-radius: 0.5rem;
+            border-top-right-radius: 0.5rem;
+        }
+        .fallback-image-container {
+            width: 100%;
+            height: 150px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-top-left-radius: 0.5rem;
+            border-top-right-radius: 0.5rem;
+            background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%); /* Light blue gradient */
+        }
+        .fallback-image-container .fas {
+            font-size: 3rem;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        .cache-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans antialiased">
+    <div id="root">
+        <!-- Cache Status Indicator -->
+        <div id="cacheIndicator" class="cache-indicator hidden">
+            <i class="fas fa-database mr-1"></i>
+            <span id="cacheStatus">Loading...</span>
+        </div>
+
+        <!-- Header -->
+        <header class="gradient-bg text-white py-6 shadow-md">
+            <div class="container mx-auto px-4 flex justify-between items-center">
+                <h1 class="text-3xl font-bold">{{ app_name }}</h1>
+                <nav class="flex items-center space-x-4">
+                    <a href="#" class="text-white hover:text-blue-200 px-3 py-2 rounded-md text-sm font-medium">Home</a>
+                    <a href="/docs" class="text-white hover:text-blue-200 px-3 py-2 rounded-md text-sm font-medium">API Docs</a>
+                    <button id="regenerateBtn" class="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-md text-sm font-medium transition-all">
+                        <i class="fas fa-sync-alt mr-2"></i>Regenerate
+                    </button>
+                </nav>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="container mx-auto px-4 py-8">
+            <!-- Editorial Section -->
+            <section id="editorialSection" class="bg-white rounded-lg shadow-lg p-8 mb-8">
+                <h2 class="text-4xl font-extrabold text-gray-800 mb-4" id="editorialTitle">Loading Editorial...</h2>
+                <p class="text-gray-700 leading-relaxed mb-6" id="editorialContent">
+                    <div class="loading-spinner inline-block w-6 h-6 border-4 border-blue-500 border-t-transparent rounded-full"></div>
+                    <span class="ml-2">Fetching the latest insights...</span>
+                </p>
+                <div class="text-right text-gray-500 text-sm">
+                    <span id="editorialAuthor"></span>
+                    <span id="editorialDate"></span>
+                </div>
+            </section>
+
+            <!-- News Articles Grid -->
+            <section>
+                <h2 class="text-3xl font-bold text-gray-800 mb-6">Latest AI News</h2>
+                <div id="newsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- News cards will be loaded here by JavaScript -->
+                    <div class="bg-white rounded-lg shadow-md overflow-hidden animate-pulse">
+                        <div class="w-full h-40 bg-gray-300"></div>
+                        <div class="p-4">
+                            <div class="h-6 bg-gray-300 rounded w-3/4 mb-2"></div>
+                            <div class="h-4 bg-gray-200 rounded w-full mb-2"></div>
+                            <div class="h-4 bg-gray-200 rounded w-5/6"></div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow-md overflow-hidden animate-pulse">
+                        <div class="w-full h-40 bg-gray-300"></div>
+                        <div class="p-4">
+                            <div class="h-6 bg-gray-300 rounded w-3/4 mb-2"></div>
+                            <div class="h-4 bg-gray-200 rounded w-full mb-2"></div>
+                            <div class="h-4 bg-gray-200 rounded w-5/6"></div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow-md overflow-hidden animate-pulse">
+                        <div class="w-full h-40 bg-gray-300"></div>
+                        <div class="p-4">
+                            <div class="h-6 bg-gray-300 rounded w-3/4 mb-2"></div>
+                            <div class="h-4 bg-gray-200 rounded w-full mb-2"></div>
+                            <div class="h-4 bg-gray-200 rounded w-5/6"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-gray-800 text-white py-8 mt-12">
+            <div class="container mx-auto px-4 text-center">
+                <p class="text-gray-400">Powered by AI • Generated with ❤️ for the AI community</p>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        class NewsletterApp {
+            constructor() {
+                this.apiBase = '/api/v1';
+                this.newsGrid = document.getElementById('newsGrid');
+                this.editorialTitle = document.getElementById('editorialTitle');
+                this.editorialContent = document.getElementById('editorialContent');
+                this.editorialAuthor = document.getElementById('editorialAuthor');
+                this.editorialDate = document.getElementById('editorialDate');
+                this.cacheIndicator = document.getElementById('cacheIndicator');
+                this.cacheStatus = document.getElementById('cacheStatus');
+                this.regenerateBtn = document.getElementById('regenerateBtn');
+                this.init();
+            }
+
+            async init() {
+                this.setupEventListeners();
+                await this.loadNewsletter();
+            }
+
+            setupEventListeners() {
+                this.regenerateBtn.addEventListener('click', () => {
+                    this.regenerateNewsletter();
+                });
+            }
+
+            async loadNewsletter() {
+                this.showLoadingState();
+                
+                try {
+                    const response = await fetch(`${this.apiBase}/newsletter`);
+                    const result = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(result.detail.message || 'Failed to load newsletter');
+                    }
+
+                    if (result.success && result.data) {
+                        this.renderEditorial(result.data.newsletter.editorial);
+                        this.renderNewsArticles(result.data.newsletter.summaries);
+                        this.updateCacheIndicator(result.data.cache_info);
+                    } else {
+                        throw new Error('Invalid response format');
+                    }
+
+                } catch (error) {
+                    console.error('Error loading newsletter:', error);
+                    this.showErrorState(error.message);
+                }
+            }
+
+            async regenerateNewsletter() {
+                this.regenerateBtn.disabled = true;
+                this.regenerateBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Regenerating...';
+                
+                try {
+                    const response = await fetch(`${this.apiBase}/newsletter/regenerate`, {
+                        method: 'POST'
+                    });
+                    const result = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(result.detail.message || 'Failed to regenerate newsletter');
+                    }
+
+                    if (result.success && result.data) {
+                        this.renderEditorial(result.data.newsletter.editorial);
+                        this.renderNewsArticles(result.data.newsletter.summaries);
+                        this.updateCacheIndicator(result.data.cache_info);
+                        
+                        // Show success message
+                        this.showNotification('Newsletter regenerated successfully!', 'success');
+                    } else {
+                        throw new Error('Invalid response format');
+                    }
+
+                } catch (error) {
+                    console.error('Error regenerating newsletter:', error);
+                    this.showNotification('Failed to regenerate newsletter', 'error');
+                } finally {
+                    this.regenerateBtn.disabled = false;
+                    this.regenerateBtn.innerHTML = '<i class="fas fa-sync-alt mr-2"></i>Regenerate';
+                }
+            }
+
+            renderEditorial(editorial) {
+                this.editorialTitle.textContent = editorial.title;
+                this.editorialContent.textContent = editorial.content;
+                this.editorialAuthor.textContent = `By ${editorial.author}`;
+                this.editorialDate.textContent = ` • ${new Date(editorial.created_at).toLocaleDateString()}`;
+            }
+
+            renderNewsArticles(summaries) {
+                this.newsGrid.innerHTML = ''; // Clear loading cards
+                summaries.forEach(summary => {
+                    const card = document.createElement('div');
+                    card.className = 'bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow duration-300';
+                    card.innerHTML = `
+                        <a href="/article/${summary.id}" class="block">
+                            <div class="relative">
+                                ${summary.original_article.thumbnail ? `
+                                    <img src="${summary.original_article.thumbnail}" 
+                                         alt="${summary.catchy_title}" 
+                                         class="news-card-image"
+                                         onerror="this.onerror=null;this.src='/static/images/fallback.png';this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden');">
+                                    <div class="fallback-image-container absolute inset-0 hidden">
+                                        <i class="fas fa-robot text-white text-5xl opacity-75"></i>
+                                    </div>
+                                ` : `
+                                    <div class="fallback-image-container">
+                                        <i class="fas fa-robot text-white text-5xl opacity-75"></i>
+                                    </div>
+                                `}
+                            </div>
+                            <div class="p-4">
+                                <h3 class="text-xl font-semibold text-gray-800 mb-2">${summary.catchy_title}</h3>
+                                <p class="text-gray-600 text-sm">${summary.summary.substring(0, 100)}...</p>
+                                <span class="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full mt-3">
+                                    ${summary.original_article.source || 'Unknown Source'}
+                                </span>
+                            </div>
+                        </a>
+                    `;
+                    this.newsGrid.appendChild(card);
+                });
+            }
+
+            updateCacheIndicator(cacheInfo) {
+                if (cacheInfo.is_cached) {
+                    this.cacheStatus.innerHTML = '<i class="fas fa-database mr-1"></i>Cached';
+                    this.cacheIndicator.className = 'cache-indicator bg-green-600';
+                } else {
+                    this.cacheStatus.innerHTML = '<i class="fas fa-bolt mr-1"></i>Fresh';
+                    this.cacheIndicator.className = 'cache-indicator bg-blue-600';
+                }
+                this.cacheIndicator.classList.remove('hidden');
+            }
+
+            showLoadingState() {
+                this.newsGrid.innerHTML = this.getLoadingCardsHtml(9);
+                this.editorialTitle.innerHTML = '<div class="loading-spinner inline-block w-6 h-6 border-4 border-blue-500 border-t-transparent rounded-full"></div> <span class="ml-2">Loading Editorial...</span>';
+                this.editorialContent.innerHTML = '<div class="h-4 bg-gray-200 rounded w-full mb-2"></div><div class="h-4 bg-gray-200 rounded w-5/6"></div>';
+            }
+
+            showErrorState(message) {
+                this.editorialTitle.textContent = 'Error Loading Newsletter';
+                this.editorialContent.textContent = `Failed to fetch the latest AI news: ${message}`;
+                this.newsGrid.innerHTML = `<p class="col-span-full text-center text-red-600">Error loading news: ${message}</p>`;
+            }
+
+            showNotification(message, type = 'info') {
+                const notification = document.createElement('div');
+                notification.className = `fixed top-4 right-4 p-4 rounded-lg shadow-lg z-50 ${
+                    type === 'success' ? 'bg-green-500 text-white' : 
+                    type === 'error' ? 'bg-red-500 text-white' : 
+                    'bg-blue-500 text-white'
+                }`;
+                notification.innerHTML = `
+                    <div class="flex items-center">
+                        <i class="fas fa-${type === 'success' ? 'check' : type === 'error' ? 'exclamation-triangle' : 'info'} mr-2"></i>
+                        ${message}
+                    </div>
+                `;
+                
+                document.body.appendChild(notification);
+                
+                setTimeout(() => {
+                    notification.remove();
+                }, 3000);
+            }
+
+            getLoadingCardsHtml(count) {
+                let html = '';
+                for (let i = 0; i < count; i++) {
+                    html += `
+                        <div class="bg-white rounded-lg shadow-md overflow-hidden animate-pulse">
+                            <div class="w-full h-40 bg-gray-300"></div>
+                            <div class="p-4">
+                                <div class="h-6 bg-gray-300 rounded w-3/4 mb-2"></div>
+                                <div class="h-4 bg-gray-200 rounded w-full mb-2"></div>
+                                <div class="h-4 bg-gray-200 rounded w-5/6"></div>
+                            </div>
+                        </div>
+                    `;
+                }
+                return html;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            new NewsletterApp();
+        });
+    </script>
+</body>
+</html>
